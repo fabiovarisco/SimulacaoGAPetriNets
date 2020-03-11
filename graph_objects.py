@@ -20,9 +20,9 @@ class Node(ABC):
 
 class Place(Node):
     
-    def __init__(self, id):
+    def __init__(self, id, number_of_marks = 0):
         super().__init__(id)
-        self.marks = 0
+        self.marks = number_of_marks
 
     def is_transition_node(self):
         return False
@@ -30,13 +30,16 @@ class Place(Node):
     def is_place_node(self):
         return True
 
-    def add_mark(marks_to_add = 1):
+    def set_marks(self, number_of_marks):
+        self.marks = number_of_marks
+
+    def add_mark(self, marks_to_add = 1):
         self.marks += marks_to_add
 
-    def remove_mark(marks_to_remove = 1):
+    def remove_mark(self, marks_to_remove = 1):
         self.marks -= marks_to_remove
 
-    def get_marks():
+    def get_marks(self, ):
         return self.marks
 
 class Transition(Node):
@@ -65,7 +68,7 @@ class Transition(Node):
         return self.incoming_arcs
 
     def is_transition_enabled(self):
-        for arc in incoming_arcs:
+        for arc in self.incoming_arcs:
             if arc.weight > arc.previous.get_marks():
                 return False
         return True
@@ -73,10 +76,10 @@ class Transition(Node):
     def evaluate(self):
         if not self.is_transition_enabled():
             return
-        for arc in incoming_arcs:
+        for arc in self.incoming_arcs:
             arc.previous.remove_mark(marks_to_remove = arc.get_weight())
         
-        for arc in outgoing_arcs:
+        for arc in self.outgoing_arcs:
             arc.next.add_mark(marks_to_add = arc.get_weight())
 
         
@@ -105,5 +108,42 @@ class Arc(object):
         return False
 
 
+class PetriNet(object):
+
+    def __init__(self):
+        self.places = {}
+        self.transitions = {}
+        self.arcs = []
+        pass 
+    
+    def add_place(self, id, number_of_marks = 0):
+        self.places[id] = Place(id, number_of_marks=number_of_marks)
+    
+    def set_number_of_marks_for_place(self, place_id, number_of_marks):
+        self.places[place_id].set_marks(number_of_marks)
+
+    def add_transition(self, id):
+        self.transitions[id] = Transition(id)
+    
+    def connect_place_to_transition(self, place_id, transition_id, weight = 1):
+        place = self.places[place_id]
+        transition = self.transitions[transition_id]
+        arc = Arc(place, transition, weight = weight)
+        transition.add_incoming_arc(arc)
+        self.arcs.append(arc)
+    
+    def connect_transition_to_place(self, transition_id, place_id, weight = 1):
+        place = self.places[place_id]
+        transition = self.transitions[transition_id]
+        arc = Arc(transition, place, weight = weight)
+        transition.add_outgoing_arc(arc)
+        self.arcs.append(arc)
+
+    def evaluate(self):
+        for _, transition in self.transitions.items():
+            transition.evaluate()
+    
+    def print_state(self):
+        pass 
 
     
