@@ -132,6 +132,24 @@ class Arc(object):
     def is_arc_enabled(self):
         return self.is_enabled
 
+class InhibitorArc(Arc):
+
+    def __init__(self, previous, next, weight = 1, id = ''):
+        if id is not None: 
+            super().__init__(previous, next, weight=weight, id=id)
+        else:
+            super().__init__(previous, next, weight=weight)
+        self.is_inhibitor = True
+
+    def enable_arc(self):
+        self.is_enabled = False 
+
+    def reset_arc(self):
+        self.is_enabled = True 
+
+    def is_arc_enabled(self):
+        return self.is_enabled
+    
 
 class PetriNet(object):
 
