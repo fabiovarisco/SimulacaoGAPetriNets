@@ -58,23 +58,12 @@ class Place(Node):
     def get_marks(self):
         return self.marks
 
-    def enable_outgoing_arcs(self): 
-        enabled_outgoing_arcs = [arc for arc in self.get_outgoing_arcs() if self.marks >= arc.get_weight()]
-
-        marks_left_to_consume = self.marks
-
-        while (marks_left_to_consume > 0 and len(enabled_outgoing_arcs) > 0):
-            chosen_arc = random.randint(0, len(enabled_outgoing_arcs) - 1)
-            if marks_left_to_consume >= enabled_outgoing_arcs[chosen_arc].get_weight():
-                enabled_outgoing_arcs[chosen_arc].enable_arc()
-                marks_left_to_consume -= enabled_outgoing_arcs[chosen_arc].get_weight()
-
-            del enabled_outgoing_arcs[chosen_arc]  
 
 class Transition(Node):
 
     def __init__(self, id):
         super().__init__(id)
+        self.transition_inhibited = False
 
     def is_transition_node(self):
         return True
@@ -88,15 +77,19 @@ class Transition(Node):
                 return False
         return True
 
-    def evaluate(self):
-        if not self.is_transition_enabled():
-            return
-        for arc in self.incoming_arcs:
-            arc.previous.remove_mark(marks_to_remove = arc.get_weight())
-        
-        for arc in self.outgoing_arcs:
-            arc.next.add_mark(marks_to_add = arc.get_weight())
+    def set_transition_inhibited(self):
+        self.transition_inhibited = True 
+    
+    def reset_transition_inhibited(self):
+        self.transition_inhibited = False 
+    
+    def is_transition_inhibited(self):
+        return self.transition_inhibited
 
+    def get_list_of_disputes(self):
+        return [arc.get_previous().get_id() for arc in self.incoming_arcs if arc.was_arc_disputed()]
+
+    
         
 class Arc(object):
 
@@ -107,6 +100,7 @@ class Arc(object):
         self.id = id
         self.inhibitor = False
         self.is_enabled = False
+        self.was_disputed = False 
 
     def get_next(self):
         return self.next
@@ -129,8 +123,20 @@ class Arc(object):
     def reset_arc(self):
         self.is_enabled = False 
 
+    def set_was_disputed(self): 
+        self.was_disputed = True 
+
+    def reset_was_disputed(self):
+        self.was_disputed = False
+
+    def was_arc_disputed(self):
+        return self.was_disputed 
+
     def is_arc_enabled(self):
         return self.is_enabled
+    
+    def get_weight_to_consume(self):
+        return self.weight
 
 class InhibitorArc(Arc):
 
@@ -139,7 +145,10 @@ class InhibitorArc(Arc):
             super().__init__(previous, next, weight=weight, id=id)
         else:
             super().__init__(previous, next, weight=weight)
-        self.is_inhibitor = True
+        self.is_enabled = True
+
+    def get_weight_to_consume(self):
+        return 0
 
     def enable_arc(self):
         self.is_enabled = False 
@@ -147,17 +156,104 @@ class InhibitorArc(Arc):
     def reset_arc(self):
         self.is_enabled = True 
 
-    def is_arc_enabled(self):
-        return self.is_enabled
+    def is_inhibitor(self):
+        return True
     
+
+
+class PetriNetSolver(object):
+
+
+    def __init__(self, arcs, places, transitions):
+        self.arcs = arcs
+        self.places = places 
+        self.transitions = transitions
+        self.are_outgoing_arcs_enabled = False 
+
+    def __enable_outgoing_arcs(self):
+        if self.are_outgoing_arcs_enabled:
+            return
+
+        for _, place in self.places.items():
+           self.__inhibit_transitions_from_place(place)
+        
+        for _, place in self.places.items():
+           self.__enable_outgoing_arcs_for_place(place)
+
+        self.are_outgoing_arcs_enabled = True
+
+    def __reset_outgoing_arcs(self):
+        for arc in self.arcs:
+            arc.reset_arc()
+            arc.reset_was_disputed()
+            if isinstance(arc.next, Transition):
+                arc.next.reset_transition_inhibited()
+        self.are_outgoing_arcs_enabled = False
+
+    def __inhibit_transitions_from_place(self, place):
+        for arc in place.get_outgoing_arcs():
+            if arc.is_inhibitor() and place.get_marks() >= arc.get_weight():
+                arc.enable_arc()
+                arc.next.set_transition_inhibited()
+
+    def __enable_outgoing_arcs_for_place(self, place): 
+
+        enabled_outgoing_arcs = [arc for arc in place.get_outgoing_arcs() if place.get_marks() >= arc.get_weight() and not arc.is_inhibitor() and not arc.next.is_transition_inhibited()]
+
+        required_marks = sum([arc.get_weight_to_consume() for arc in enabled_outgoing_arcs])
+
+        if (required_marks <= place.get_marks()):
+            for arc in enabled_outgoing_arcs:
+                arc.enable_arc()
+            return 
+
+        # se o arco estiver sendo disputado e ganhar, mas os outros arcos que chegam na transição não estiverem habilitados, a disputa foi "inútil" e a transição não vai ser executado 
+        for arc in enabled_outgoing_arcs:
+            arc.set_was_disputed()
+
+        marks_left_to_consume = place.get_marks()
+
+        while (len(enabled_outgoing_arcs) > 0):
+            chosen_arc = random.randint(0, len(enabled_outgoing_arcs) - 1)
+            if marks_left_to_consume >= enabled_outgoing_arcs[chosen_arc].get_weight_to_consume():
+                enabled_outgoing_arcs[chosen_arc].enable_arc()
+                marks_left_to_consume -= enabled_outgoing_arcs[chosen_arc].get_weight_to_consume()
+
+            del enabled_outgoing_arcs[chosen_arc]  
+        
+
+    def pre_process_for_print(self):
+        self.__enable_outgoing_arcs()
+
+    def evaluate(self):
+        self.__enable_outgoing_arcs()
+
+        transition_keys_to_evaluate = [key for key, transition in self.transitions.items() if transition.is_transition_enabled()]
+        
+        for key in transition_keys_to_evaluate:
+            self.evaluate_transition(self.transitions[key])
+
+        self.__reset_outgoing_arcs()
+
+    def evaluate_transition(self, transition):
+        if not transition.is_transition_enabled():
+            return
+
+        for arc in transition.get_incoming_arcs():
+            arc.previous.remove_mark(marks_to_remove = arc.get_weight())
+        
+        for arc in transition.get_outgoing_arcs():
+            arc.next.add_mark(marks_to_add = arc.get_weight())
+
 
 class PetriNet(object):
 
-    def __init__(self):
+    def __init__(self, Petri_net_solver_class = PetriNetSolver):
         self.places = {}
         self.transitions = {}
         self.arcs = []
         self.are_outgoing_arcs_enabled = False
+        self.solver = Petri_net_solver_class(self.arcs, self.places, self.transitions)
     
     def add_place(self, id, number_of_marks = 0):
         self.places[id] = Place(id, number_of_marks=number_of_marks)
@@ -171,7 +267,7 @@ class PetriNet(object):
     def connect_place_to_transition(self, place_id, transition_id, weight = 1):
         place = self.places[place_id]
         transition = self.transitions[transition_id]
-        arc = Arc(place, transition, weight = weight)
+        arc = Arc(place, transition, weight)
         transition.add_incoming_arc(arc)
         place.add_outgoing_arc(arc)
         self.arcs.append(arc)
@@ -184,43 +280,44 @@ class PetriNet(object):
         place.add_incoming_arc(arc)
         self.arcs.append(arc)
 
+    def inhibit_transition_by_place(self, place_id, transition_id, weight = 1):
+        place = self.places[place_id]
+        transition = self.transitions[transition_id]
+        arc = InhibitorArc(place, transition, weight = weight)
+        transition.add_incoming_arc(arc)
+        place.add_outgoing_arc(arc)
+        self.arcs.append(arc)
+
     def evaluate(self):
-        self._enable_outgoing_arcs()
-
-        transition_keys_to_evaluate = [key for key, transition in self.transitions.items() if transition.is_transition_enabled()]
-        
-        for key in transition_keys_to_evaluate:
-            self.transitions[key].evaluate()
-
-        self._reset_outgoing_arcs()
+        self.solver.evaluate()
     
-    def print_state(self):
+    def get_state(self):
 
-        self._enable_outgoing_arcs()
+        self.solver.pre_process_for_print()
 
         print_matrix = {key: place.get_marks() for key, place in self.places.items()}
-        print_matrix = dict(print_matrix, **{key: transition.is_transition_enabled() for key, transition in self.transitions.items()})
-
-        output = pd.DataFrame.from_records([print_matrix])
-        print(output)
+        list_separator = ', '
+        for key, transition in self.transitions.items():
+            list_of_disputes = transition.get_list_of_disputes()
+            print_matrix[key] = f'{"S" if transition.is_transition_enabled() else "N"} {f"({list_separator.join(list_of_disputes)})" if len(list_of_disputes) > 0 else ""}'
         
-    def _enable_outgoing_arcs(self):
-        if self.are_outgoing_arcs_enabled:
-            return
+        return print_matrix
         
-        for _, place in self.places.items():
-            place.enable_outgoing_arcs()
+    def run_petri_net_for(self, n = 1):
+        
+        net_states = []
+        for i in range(n):
+            net_states.append(self.get_state())
+            self.evaluate()
+        columns = [key for key in self.places.keys()]
+        columns.extend(key for key in self.transitions.keys())
 
-        self.are_outgoing_arcs_enabled = True
+        pd.set_option('display.max_columns', None)
 
-    def _reset_outgoing_arcs(self):
-        for arc in self.arcs:
-            arc.reset_arc()
-        self.are_outgoing_arcs_enabled = False
+        output_dataframe = pd.DataFrame.from_records(net_states, columns=columns)
+        print(output_dataframe)
         
 
 
 
 
-
-    

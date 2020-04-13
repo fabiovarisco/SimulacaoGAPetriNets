@@ -25,6 +25,4 @@ if __name__ == '__main__':
     petri_net.connect_place_to_transition('P3', 'T3')
     petri_net.connect_transition_to_place('T3', 'P5')
 
-    for i in range(5):
-        petri_net.print_state()
-        petri_net.evaluate()
+    petri_net.run_petri_net_for(6)
