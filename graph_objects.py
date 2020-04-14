@@ -77,6 +77,13 @@ class Transition(Node):
                 return False
         return True
 
+    def is_transition_eligible(self):
+        if self.is_transition_inhibited(): return False 
+        for arc in self.incoming_arcs:
+            if (not arc.is_arc_enabled()) and (not arc.was_arc_disputed()):
+                return False
+        return True 
+
     def set_transition_inhibited(self):
         self.transition_inhibited = True 
     
@@ -169,16 +176,23 @@ class PetriNetSolver(object):
         self.places = places 
         self.transitions = transitions
         self.are_outgoing_arcs_enabled = False 
+        self.aux_marks = {}
 
     def __enable_outgoing_arcs(self):
         if self.are_outgoing_arcs_enabled:
             return
 
+        self.aux_marks = {key: place.get_marks() for key, place in self.places.items()}
+
         for _, place in self.places.items():
            self.__inhibit_transitions_from_place(place)
         
         for _, place in self.places.items():
-           self.__enable_outgoing_arcs_for_place(place)
+           self.__enable_undisputed_arcs_for_place(place)
+
+        transition_keys = random.sample(self.transitions.keys(), len(self.transitions))
+        for key in transition_keys:
+            self.__enable_disputed_arcs_from_transition(self.transitions[key])
 
         self.are_outgoing_arcs_enabled = True
 
@@ -196,31 +210,36 @@ class PetriNetSolver(object):
                 arc.enable_arc()
                 arc.next.set_transition_inhibited()
 
-    def __enable_outgoing_arcs_for_place(self, place): 
+    def __enable_disputed_arcs_from_transition(self, transition):
+        if not transition.is_transition_eligible():
+            for arc in transition.get_incoming_arcs():
+                arc.reset_was_disputed()
+            return 
+        
+        for arc in transition.get_incoming_arcs():
+            if not arc.is_inhibitor() and self.aux_marks[arc.previous.get_id()] < arc.get_weight_to_consume():
+                return 
+        
+        for arc in transition.get_incoming_arcs():
+            if not arc.is_inhibitor():
+                self.aux_marks[arc.previous.get_id()] -= arc.get_weight_to_consume()
+                arc.enable_arc()
+
+    def __enable_undisputed_arcs_for_place(self, place): 
 
         enabled_outgoing_arcs = [arc for arc in place.get_outgoing_arcs() if place.get_marks() >= arc.get_weight() and not arc.is_inhibitor() and not arc.next.is_transition_inhibited()]
 
         required_marks = sum([arc.get_weight_to_consume() for arc in enabled_outgoing_arcs])
 
+        # enable undisputed arcs
         if (required_marks <= place.get_marks()):
             for arc in enabled_outgoing_arcs:
                 arc.enable_arc()
             return 
 
-        # se o arco estiver sendo disputado e ganhar, mas os outros arcos que chegam na transição não estiverem habilitados, a disputa foi "inútil" e a transição não vai ser executado 
+        # set disputed arcs 
         for arc in enabled_outgoing_arcs:
             arc.set_was_disputed()
-
-        marks_left_to_consume = place.get_marks()
-
-        while (len(enabled_outgoing_arcs) > 0):
-            chosen_arc = random.randint(0, len(enabled_outgoing_arcs) - 1)
-            if marks_left_to_consume >= enabled_outgoing_arcs[chosen_arc].get_weight_to_consume():
-                enabled_outgoing_arcs[chosen_arc].enable_arc()
-                marks_left_to_consume -= enabled_outgoing_arcs[chosen_arc].get_weight_to_consume()
-
-            del enabled_outgoing_arcs[chosen_arc]  
-        
 
     def pre_process_for_print(self):
         self.__enable_outgoing_arcs()
@@ -240,7 +259,8 @@ class PetriNetSolver(object):
             return
 
         for arc in transition.get_incoming_arcs():
-            arc.previous.remove_mark(marks_to_remove = arc.get_weight())
+            if not arc.is_inhibitor():
+                arc.previous.remove_mark(marks_to_remove = arc.get_weight())
         
         for arc in transition.get_outgoing_arcs():
             arc.next.add_mark(marks_to_add = arc.get_weight())
