@@ -103,7 +103,7 @@ class Arc(object):
     def __init__(self, previous, next, weight = 1, id = ''):
         self.previous = previous
         self.next = next
-        self.weight = 1
+        self.weight = weight
         self.id = id
         self.inhibitor = False
         self.is_enabled = False
@@ -287,7 +287,7 @@ class PetriNet(object):
     def connect_place_to_transition(self, place_id, transition_id, weight = 1):
         place = self.places[place_id]
         transition = self.transitions[transition_id]
-        arc = Arc(place, transition, weight)
+        arc = Arc(place, transition, weight = weight)
         transition.add_incoming_arc(arc)
         place.add_outgoing_arc(arc)
         self.arcs.append(arc)

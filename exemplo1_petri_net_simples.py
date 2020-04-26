@@ -18,7 +18,7 @@ if __name__ == '__main__':
     petri_net.add_transition('T2')
     petri_net.add_transition('T3')
     petri_net.connect_place_to_transition('P1', 'T1')
-    petri_net.connect_place_to_transition('P2', 'T1')
+    petri_net.connect_place_to_transition('P2', 'T1', 2)
     petri_net.connect_transition_to_place('T1', 'P3')
     petri_net.connect_place_to_transition('P3', 'T2')
     petri_net.connect_transition_to_place('T2', 'P4')
