@@ -1,13 +1,12 @@
 
 
 from graph_objects import PetriNet
+from XMLParser import XML_Parser
 
-print(__name__)
 
 if __name__ == '__main__':
 
-    print('Starting Petri Net')
-
+    '''
     petri_net = PetriNet()
     petri_net.add_place('ra_castelo', number_of_marks=1)
     petri_net.add_place('ra_acorda', number_of_marks=0)
@@ -55,6 +54,19 @@ if __name__ == '__main__':
     petri_net.set_number_of_marks_for_place('ra_acorda', 1)
 
     petri_net.run_petri_net_for(5)
+
+    petri_net.set_number_of_marks_for_place('ra_dorme', 1)
+
+    petri_net.run_petri_net_for(5)
+    '''
+
+    petri_net = XML_Parser.parseXML('./exemplo2_ra_real.pflow')
+
+    petri_net.run_petri_net_for(5)
+    
+    petri_net.set_number_of_marks_for_place('ra_acorda', 1)
+
+    petri_net.run_petri_net_for(10)
 
     petri_net.set_number_of_marks_for_place('ra_dorme', 1)
 

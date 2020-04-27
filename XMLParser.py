@@ -1,74 +1,72 @@
 import xml.etree.ElementTree as ET 
+from graph_objects import PetriNet
+import sys
 
-def parseXML(xmlfile): 
+class XML_Parser(object):
 
-	#Create element tree object 
-	tree = ET.parse(xmlfile) 
+    @staticmethod
+    def parseXML(xmlfile): 
 
-	#Get root element 
-	root = tree.getroot() 
+        #Create element tree object 
+        tree = ET.parse(xmlfile) 
 
-	#Dict for places
-	places = {}
-	transitions = {}
-	
-	print('Places')
-	#Create all places
-	for place in root.findall('subnet/place'): 
-		#Search attributes
-		id =  place.find('id').text
-		label = place.find('label').text
-		tokens = place.find('tokens').text
-		
-		#Add places to dictionary
-		places[int(id)] = label
-				
-		#Net
-		#petri_net.add_place(label, tokens)
-		print(places)
-	
-	print('Transitions')
-	# create all transitions
-	for transition in root.findall('subnet/transition'):
-		#Search attributes
-		id =  transition.find('id').text
-		label = transition.find('label').text
-		
-		#Add places to dictionary
-		transitions[int(id)] = label
-				
-		#Net
-		#petri_net.add_transition(label)
-		print(transitions)
-		
-	#Create all arcs
-	print('Arcs')
-	#Create all arcs
-	for arc in root.findall('subnet/arc'): 
-		#Search attributes
-		sourceId =  arc.find('sourceId').text
-		destinationId = arc.find('destinationId').text
-		multiplicity = arc.find('multiplicity').text
-		
-		
-		#Decision which method select
-		if int(sourceId) in places:
-			print(sourceId + '-' + destinationId + '-' + multiplicity + ' place_to_transition')
-			#petri_net.connect_place_to_transition('places[sourceId]', 'places[destinationId]', multiplicity)
-				
-		if int(sourceId) in transitions:
-			print(sourceId + '-' + destinationId + '-' + multiplicity + ' transition_to_place')
-			#petri_net.connect_transition_to_place('places[sourceId]', 'places[destinationId]', multiplicity)
-	
-	
+        #Get root element 
+        root = tree.getroot() 
 
-def main():
+        #Dict for places
+        places = {}
+        transitions = {}
 
-	#Parse xml file 
-	parseXML('xml.xml')
-	
-	
+        petri_net = PetriNet()
+        
+        #Create all places
+        for place in root.findall('subnet/place'): 
+            #Search attributes
+            id =  place.find('id').text
+            label = place.find('label').text
+            tokens = int(place.find('tokens').text)
+            
+            #Add places to dictionary
+            places[int(id)] = label
+                    
+            #Net
+            petri_net.add_place(label, tokens)
+            
+        # create all transitions
+        for transition in root.findall('subnet/transition'):
+            #Search attributes
+            id =  transition.find('id').text
+            label = transition.find('label').text
+            
+            #Add places to dictionary
+            transitions[int(id)] = label
+                    
+            #Net
+            petri_net.add_transition(label)
+            
+        #Create all arcs
+        for arc in root.findall('subnet/arc'): 
+            #Search attributes
+            sourceId =  int(arc.find('sourceId').text)
+            destinationId = int(arc.find('destinationId').text)
+            multiplicity = int(arc.find('multiplicity').text)
+            arc_type = arc.find('type').text
+            
+            #Decision which method select
+            if int(sourceId) in places:
+                if arc_type == 'regular':
+                    petri_net.connect_place_to_transition(places[sourceId], transitions[destinationId], multiplicity)
+                elif arc_type == 'inhibitor':
+                    petri_net.inhibit_transition_by_place(places[sourceId], transitions[destinationId], multiplicity)
+            elif int(sourceId) in transitions:
+                petri_net.connect_transition_to_place(transitions[sourceId], places[destinationId], multiplicity)
+        
+        return petri_net
+    
+    
+    
 if __name__ == "__main__": 
 
-	# calling main function 
-	main() 
+    petri_net = XML_Parser.parseXML(sys.argv[1])
+
+    petri_net.run_petri_net_for(5)
